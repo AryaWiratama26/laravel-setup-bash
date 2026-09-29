@@ -6,7 +6,7 @@
 
 Create the project · Configure the database · Generate the app key · Run migrations · Build assets
 
-[![Bash](https://img.shields.io/badge/bash-4.0%2B-blue.svg)](https://www.gnu.org/software/bash/)
+[![Bash](https://img.shields.io/badge/bash-3.2%2B-blue.svg)](https://www.gnu.org/software/bash/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](#requirements)
 
 </div>
@@ -15,18 +15,40 @@ Create the project · Configure the database · Generate the app key · Run migr
 
 ## Table of Contents
 
+- [Quick Install](#quick-install)
 - [Overview](#overview)
 - [Features](#features)
 - [Requirements](#requirements)
-- [Installation](#installation)
 - [Usage](#usage)
+  - [Interactive](#interactive)
+  - [Non-interactive](#non-interactive)
+  - [Running the script without the installer](#running-the-script-without-the-installer)
 - [What the Script Does](#what-the-script-does)
+- [Options](#options)
 - [Database Support](#database-support)
-- [Environment Variables](#environment-variables)
+- [Configuration](#configuration)
 - [After Setup](#after-setup)
+- [Security](#security)
 - [Exit Codes and Troubleshooting](#exit-codes-and-troubleshooting)
+- [Deploying on Vercel](#deploying-on-vercel)
 - [Project Structure](#project-structure)
 - [License](#license)
+
+---
+
+## Quick Install
+
+```bash
+curl -sSL https://aryawiratama.web.id/install.sh | bash
+```
+
+Inspect the script before running it:
+
+```bash
+curl -sSL https://aryawiratama.web.id/install.sh | bash -s -- --dry-run
+```
+
+Without installing anything. `install.sh` downloads `setup.sh` into a temporary directory, verifies it, and hands the terminal over to it — which is what makes the pipe safe.
 
 ---
 
@@ -36,23 +58,28 @@ Bootstrapping a new Laravel application usually means repeating the same sequenc
 
 `setup.sh` automates that sequence behind a guided prompt. It asks a handful of questions, performs every step, and reports exactly what succeeded and what failed — so you always know the state of the project it produced.
 
+`install.sh` is a thin bootstrapper for one-liner installs. It exists because `curl … | bash` breaks interactive scripts: piped into `bash`, a script's `read` calls consume the remaining lines of the script itself instead of user input. `install.sh` downloads `setup.sh` to a temp file and re-runs it with the terminal attached to `stdin`.
+
 ## Features
 
 | | |
 |---|---|
+| **One-line install** | `curl -sSL …/install.sh \| bash` — works because the installer restores the terminal. |
 | **Guided prompts** | Sensible defaults for every question; press `Enter` to accept. |
+| **Non-interactive** | Every prompt has a matching option, so the script runs in CI, Docker, and cron. |
 | **Input validation** | Rejects invalid project names, unsupported versions, and malformed answers before anything is written to disk. |
 | **Dependency checks** | Verifies PHP, Composer, and the PDO driver required by the database you select. |
 | **Database provisioning** | MySQL, PostgreSQL, or SQLite — including optional automatic database creation. |
 | **Safe `.env` handling** | Updates keys in place (and uncomments them when needed) instead of rewriting the file; values are quoted and escaped. |
 | **Frontend build** | Detects npm, pnpm, or Yarn, installs dependencies, and builds assets. |
+| **Integrity check** | SHA-256 verification against a published `setup.sh.sha256`, plus a structural check of the download. |
 | **Readable output** | Each step shows a live progress indicator; command output is captured and only printed when a step fails. |
 
 ## Requirements
 
 **Mandatory**
 
-- Bash 4.0 or newer (macOS ships Bash 3.2 by default — use a newer shell)
+- Bash 3.2 or newer (macOS ships Bash 3.2 by default)
 - PHP 8.2 or newer
 - [Composer](https://getcomposer.org)
 
@@ -67,31 +94,13 @@ The script targets Linux and macOS. It relies only on Bash built-ins and standar
 | `psql` / `createdb` client | Automatic PostgreSQL database creation |
 | PDO driver (`pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`) | The database engine you select |
 
-## Installation
-
-```bash
-git clone <repository-url> laravel-setup-bash
-cd laravel-setup-bash
-chmod +x setup.sh
-```
-
-No installation step is required — the script has no dependencies beyond the tools listed above.
-
 ## Usage
 
-Run the script from this directory:
+### Interactive
 
 ```bash
-./setup.sh
+curl -sSL https://aryawiratama.web.id/install.sh | bash
 ```
-
-Or invoke it from anywhere:
-
-```bash
-bash /path/to/laravel-setup-bash/setup.sh
-```
-
-### Example session
 
 ```
 Preflight checks
@@ -137,6 +146,44 @@ Laravel setup
 Done
 ```
 
+### Non-interactive
+
+Pass the options and `--yes` to skip every prompt. Required in CI, cron, and Docker builds, where no terminal is attached:
+
+```bash
+curl -sSL https://aryawiratama.web.id/install.sh \
+  | bash -s -- --name=shop --version=12 --db=sqlite --yes
+```
+
+```yaml
+# GitHub Actions
+- run: curl -sSL https://aryawiratama.web.id/install.sh | bash -s -- --name=app --db=sqlite --yes --no-build
+```
+
+```dockerfile
+RUN curl -sSL https://aryawiratama.web.id/install.sh | bash -s -- --name=app --db=sqlite --yes --dir=/app
+```
+
+### Running the script without the installer
+
+`install.sh` is optional. Cloning the repository works identically:
+
+```bash
+git clone <repository-url> laravel-setup-bash
+cd laravel-setup-bash
+./setup.sh
+```
+
+Or, to inspect the script before trusting it:
+
+```bash
+curl -fsSL https://aryawiratama.web.id/setup.sh -o setup.sh
+less setup.sh
+bash setup.sh
+```
+
+Downloading to a file and running it is always safe for interactive prompts, because `stdin` stays attached to your terminal.
+
 ## What the Script Does
 
 The script runs in six phases.
@@ -172,6 +219,7 @@ Runs the standard post-install commands, in order:
 | App key | `php artisan key:generate --force` |
 | Storage symlink | `php artisan storage:link --force` |
 | Migrations | `php artisan migrate --force` |
+| Database seeder | `php artisan db:seed --force` — only with `--seed` |
 | Dependencies | `pnpm install`, `yarn install`, or `npm install` — chosen from the lockfile present |
 | Asset build | `npm run build` |
 | Version control | `git init` (skipped if the directory is already a repository) |
@@ -179,6 +227,43 @@ Runs the standard post-install commands, in order:
 ### 6. Summary
 
 Prints the directory to change into, the command to start the development server, and follow-up commands for seeding and testing.
+
+## Options
+
+`install.sh` accepts its own options and forwards everything else to `setup.sh`.
+
+### Installer options
+
+| Option | Description |
+|---|---|
+| `-n`, `--dry-run` | Download `setup.sh`, print it, and exit without running it. |
+| `--base-url=URL` | Fetch `setup.sh` from `URL` instead of `https://aryawiratama.web.id`. |
+| `--no-verify` | Skip the SHA-256 integrity check. |
+| `--allow-root` | Run even when invoked with `sudo` (off by default). |
+| `-h`, `--help` | Show the installer's help. |
+| `-V`, `--version` | Show the installer version. |
+
+Pass installer options *before* `--`; everything after it is forwarded verbatim.
+
+### Setup options
+
+| Option | Default | Description |
+|---|---|---|
+| `--name=NAME` | `my_app_default` | Project directory name. |
+| `--version=VERSION` | `12` | Laravel major version: `11`, `12`, or `13`. |
+| `--db=ENGINE` | `1` (MySQL) | `mysql`, `pgsql` (or `postgres`), or `sqlite`. |
+| `--db-host=HOST` | `127.0.0.1` | Database host. |
+| `--db-port=PORT` | `3306` / `5432` | Database port. |
+| `--db-name=NAME` | Derived from `--name` | Database name. |
+| `--db-user=USER` | `root` / `postgres` | Database user. |
+| `--db-password=PASS` | *(empty)* | Database password. |
+| `--dir=PATH` | Current directory | Directory to create the project in. Must exist. |
+| `--seed` | off | Run `php artisan db:seed` after migrating. |
+| `--no-build` | off | Skip installing and building front-end assets. |
+| `-n`, `--dry-run` | off | Print the resolved plan and exit. |
+| `-y`, `--yes` | off | Accept every default and never prompt. |
+| `-h`, `--help` | — | Show `setup.sh` help. |
+| `-V`, `--version` | — | Show the script version. |
 
 ## Database Support
 
@@ -190,7 +275,7 @@ Prints the directory to change into, the command to start the development server
 
 Credentials are always sent to the client through the `MYSQL_PWD` and `PGPASSWORD` environment variables rather than command-line arguments, so they do not appear in the process list.
 
-## Environment Variables
+## Configuration
 
 The script is fully interactive and takes no arguments. Every value it needs is collected at runtime:
 
@@ -226,15 +311,35 @@ php artisan db:seed        # load sample data
 php artisan test           # run the test suite
 ```
 
+## Security
+
+Piping a script from the internet into `bash` deserves a second look. The measures this project takes:
+
+| Measure | Behaviour |
+|---|---|
+| **Dry run** | `--dry-run` prints the script and exits. Nothing is executed. |
+| **Structural check** | The download is rejected if it is empty or is not a Bash script. |
+| **Checksum** | If `setup.sh.sha256` is published next to `setup.sh`, its SHA-256 is verified and a mismatch aborts the install. Missing checksum is a warning, not a failure. |
+| **No `sudo`** | The installer refuses to run as root. Project files would be owned by root. Override with `--allow-root` if you know what you are doing. |
+| **Temp cleanup** | `setup.sh` is executed from a temporary directory that is removed on exit, including on `Ctrl+C`. |
+| **No secrets in argv** | Database passwords are passed to the client through the environment, never as command-line arguments. |
+| **Non-interactive guard** | With no terminal attached and no `--yes`, the installer stops with instructions instead of failing halfway through. |
+
+Always serving over HTTPS matters: the checksum only protects against a modified file if the transport itself is trusted.
+
 ## Exit Codes and Troubleshooting
 
 | Exit code | Meaning |
 |---|---|
 | `0` | Setup completed. Individual steps may still have reported warnings. |
-| `1` | Fatal error — a missing dependency, invalid input, or a failed `composer create-project`. |
+| `1` | Fatal error — a missing dependency, invalid input, a failed download, or a failed `composer create-project`. |
 | `130` | Interrupted with `Ctrl+C` or end-of-input. |
 
-**A step shows `! ... failed`.** Setup continues so you can fix the problem without re-running everything. The captured output is printed under the warning; run the same command manually inside the project to investigate.
+**A step shows `! … failed`.** Setup continues so you can fix the problem without re-running everything. The captured output is printed under the warning; run the same command manually inside the project to investigate.
+
+**`No interactive terminal available.`** CI, cron, or SSH without a TTY. Pass the options with `--yes`, or download the script and run it from a real terminal.
+
+**`Checksum mismatch for setup.sh.`** Either the download was tampered with, or the published `setup.sh.sha256` is stale. Verify manually, then regenerate the checksum or delete the file.
 
 **`PHP extension 'pdo_mysql' is missing.`** Install the driver for your package manager, for example `sudo apt install php8.3-mysql`.
 
@@ -242,10 +347,78 @@ php artisan test           # run the test suite
 
 **The target directory already exists.** Composer will not overwrite a non-empty directory. Remove it, choose a different name, or let the script continue and resolve merge prompts yourself.
 
+**The script updated but users get the old version.** That is CDN caching. Bump `VERSION` in `install.sh` (it is used as a cache-busting query parameter) and redeploy.
+
+## Deploying on Vercel
+
+The installer is served as a static file — Vercel never executes it, and no `chmod` is needed. Two supported layouts.
+
+### Option A — a dedicated Vercel project
+
+Deploy this repository as its own Vercel project and point a subdomain at it. The website stays untouched, and the files served are exactly the ones in this repository.
+
+1. Import the repository in Vercel with the **Other** framework preset (no build command).
+2. Set the output directory to the repository root.
+3. Add the domain, for example `install.aryawiratama.web.id`.
+4. Deploy.
+
+```
+https://install.aryawiratama.web.id/install.sh
+```
+
+### Option B — inside an existing Vercel project
+
+If `aryawiratama.web.id` already serves a site, drop the files into that project's `public/` directory:
+
+```
+public/
+├── install.sh
+└── setup.sh
+```
+
+```
+https://aryawiratama.web.id/install.sh
+```
+
+### Caching
+
+Both layouts need the headers in `vercel.json`, otherwise the CDN keeps serving an old `setup.sh` after you update it:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/(install|setup)\\.sh",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ]
+}
+```
+
+`install.sh` also appends `?v=<VERSION>` to the download URL, so bumping `VERSION` guarantees users get the current script.
+
+### Checksum publishing (optional)
+
+To enable integrity verification, publish `setup.sh.sha256` next to `setup.sh` and regenerate it **every time `setup.sh` changes**:
+
+```bash
+sha256sum setup.sh > setup.sh.sha256
+```
+
+A stale checksum aborts the installer for every user, so it is git-ignored in this repository. If you publish it from CI, regenerate it in the same job that deploys — for example a build step that runs the command above before `vercel deploy`.
+
 ## Project Structure
 
 ```
 laravel-setup-bash/
-├── setup.sh      # The setup script
-└── README.md     # Documentation
+├── install.sh      # Bootstrapper for one-line installs
+├── setup.sh        # The setup script
+├── vercel.json     # Cache headers for the published files
+└── README.md       # Documentation
 ```
+
+## License
+
+Released under the MIT License.

@@ -1,0 +1,22 @@
+{
+  "headers": [
+    {
+      "source": "/(install|setup)\\.sh",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/setup\\.sh\\.sha256",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+*.log
+.DS_Store
+
+# Generated at deploy time - never commit a stale copy, it breaks the
+# installer checksum verification for every user.
+setup.sh.sha256
